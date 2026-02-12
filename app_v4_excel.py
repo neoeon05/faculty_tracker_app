@@ -48,25 +48,107 @@ def load_initial_data():
     df = df.rename(columns={df.columns[1]: "Checklist Item"})
     return df
 
-def initialize_data():
-    if not os.path.exists(DATA_FILE):
-        df_excel = load_initial_data()
-        
-        checklist_items = df_excel["Checklist Item"]
-        faculty_columns = df_excel.columns[2:]
-
-        records = []
-
-        for faculty in faculty_columns:
-            for item in checklist_items:
+def initialize_data(force=False):
+    if not os.path.exists(DATA_FILE) or force:
+        # Try to load from Excel if it exists, otherwise use default checklist
+        try:
+            if os.path.exists(EXCEL_FILE):
+                df_excel = load_initial_data()
+                checklist_items = df_excel["Checklist Item"]
+                faculty_columns = df_excel.columns[2:]
+                
+                records = []
+                for faculty in faculty_columns:
+                    for item in checklist_items:
+                        records.append({
+                            "Name": faculty.strip(),
+                            "Designation": "",
+                            "Session Name": "",
+                            "Session Date": "",
+                            "Checklist Item": item,
+                            "Status": "Pending",
+                            "Remarks": "",
+                            "Last Updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "Updated By": "System"
+                        })
+            else:
+                # Default checklist items for Guest Faculty Management
+                default_checklist_items = [
+                    "Letter to Guest Faculty",
+                    "Letter to Boss",
+                    "Tour Program",
+                    "Room Book",
+                    "Inbound Vehicle",
+                    "Outbound Vehicle",
+                    "Book Tickets",
+                    "Protocol Officer",
+                    "Link (if Online mode)",
+                    "Biodata of Faculty",
+                    "Name Plate",
+                    "Welcome Board",
+                    "Faculty Folder (OTs Biodata, Schedule, Pen)",
+                    "Local Vehicle",
+                    "Pre-receipt",
+                    "Thanks Letter",
+                    "Honorarium Put up",
+                    "Protocal Office List Update",
+                    "Reimbursement (if any)",
+                    "Feedback from OTs",
+                    "Compiling Feedback",
+                    "Postal Card"
+                ]
+                
+                records = []
+                # Start with empty database - users will add faculty manually
+                for item in default_checklist_items:
+                    records.append({
+                        "Name": "Sample Faculty",
+                        "Designation": "Guest Speaker",
+                        "Session Name": "Sample Session",
+                        "Session Date": datetime.now().strftime("%Y-%m-%d"),
+                        "Checklist Item": item,
+                        "Status": "Pending",
+                        "Remarks": "This is a sample entry. Add your own faculty from 'Manage Faculty' section.",
+                        "Last Updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Updated By": "System"
+                    })
+        except Exception as e:
+            # Fallback to default checklist if Excel loading fails
+            default_checklist_items = [
+                "Letter to Guest Faculty",
+                "Letter to Boss",
+                "Tour Program",
+                "Room Book",
+                "Inbound Vehicle",
+                "Outbound Vehicle",
+                "Book Tickets",
+                "Protocol Officer",
+                "Link (if Online mode)",
+                "Biodata of Faculty",
+                "Name Plate",
+                "Welcome Board",
+                "Faculty Folder (OTs Biodata, Schedule, Pen)",
+                "Local Vehicle",
+                "Pre-receipt",
+                "Thanks Letter",
+                "Honorarium Put up",
+                "Protocal Office List Update",
+                "Reimbursement (if any)",
+                "Feedback from OTs",
+                "Compiling Feedback",
+                "Postal Card"
+            ]
+            
+            records = []
+            for item in default_checklist_items:
                 records.append({
-                    "Name": faculty.strip(),
-                    "Designation": "",
-                    "Session Name": "",
-                    "Session Date": "",
+                    "Name": "Sample Faculty",
+                    "Designation": "Guest Speaker",
+                    "Session Name": "Sample Session",
+                    "Session Date": datetime.now().strftime("%Y-%m-%d"),
                     "Checklist Item": item,
                     "Status": "Pending",
-                    "Remarks": "",
+                    "Remarks": "This is a sample entry. Add your own faculty from 'Manage Faculty' section.",
                     "Last Updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "Updated By": "System"
                 })
@@ -75,13 +157,32 @@ def initialize_data():
         df.to_csv(DATA_FILE, index=False)
 
 def load_data():
-    df = pd.read_csv(DATA_FILE)
-    # Add new columns if they don't exist (for backward compatibility)
-    if "Last Updated" not in df.columns:
-        df["Last Updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if "Updated By" not in df.columns:
-        df["Updated By"] = "System"
-    return df
+    try:
+        # Check if file exists and is not empty
+        if not os.path.exists(DATA_FILE) or os.path.getsize(DATA_FILE) == 0:
+            raise ValueError("File does not exist or is empty")
+            
+        df = pd.read_csv(DATA_FILE)
+        
+        # Check if dataframe is empty
+        if df.empty or len(df.columns) == 0:
+            raise ValueError("Empty CSV file")
+            
+        # Add new columns if they don't exist (for backward compatibility)
+        if "Last Updated" not in df.columns:
+            df["Last Updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if "Updated By" not in df.columns:
+            df["Updated By"] = "System"
+        return df
+        
+    except (pd.errors.EmptyDataError, ValueError, FileNotFoundError) as e:
+        # If file is empty or corrupted, delete it and reinitialize
+        if os.path.exists(DATA_FILE):
+            os.remove(DATA_FILE)
+        initialize_data(force=True)
+        # Load the newly created data
+        df = pd.read_csv(DATA_FILE)
+        return df
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
@@ -152,7 +253,8 @@ def edit_faculty(old_name, old_session_date, new_name, new_designation, new_sess
 
 def export_to_excel(df, filename="faculty_checklist_export.xlsx"):
     """Export data to Excel with formatting"""
-    output_path = f"/mnt/user-data/outputs/{filename}"
+    # Use current directory for cross-platform compatibility (works on Windows, Linux, Mac)
+    output_path = filename
     
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
         df.to_excel(writer, sheet_name='Checklist Data', index=False)
@@ -206,6 +308,10 @@ initialize_data()
 if 'df' not in st.session_state:
     st.session_state.df = load_data()
 
+# Initialize success message state
+if 'success_message' not in st.session_state:
+    st.session_state.success_message = None
+
 df = st.session_state.df
 
 # -----------------------------
@@ -225,6 +331,11 @@ st.sidebar.markdown("---")
 # VIEW 1: CHECKLIST MANAGEMENT
 # =============================================
 if menu == "📋 Checklist Management":
+    
+    # Display success message if exists
+    if st.session_state.success_message:
+        st.success(st.session_state.success_message)
+        st.session_state.success_message = None
     
     # -------- Faculty Selection --------
     st.sidebar.markdown("### Select Faculty")
@@ -317,7 +428,7 @@ if menu == "📋 Checklist Management":
             st.session_state.df.loc[mask, "Updated By"] = "Admin"
             
             save_data(st.session_state.df)
-            st.sidebar.success(f"✅ {bulk_action} applied!")
+            st.session_state.success_message = f"✅ {bulk_action} applied successfully!"
             st.rerun()
     
     # Export Options
@@ -463,16 +574,16 @@ if menu == "📋 Checklist Management":
         # -----------------------------
         col1, col2, col3 = st.columns([2, 1, 2])
         with col2:
-            if st.button("💾 Save All Updates", type="primary", use_container_width=True):
+            if st.button("💾 Save All Updates", type="primary", width="stretch"):
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 for idx, status, remarks in updated_rows:
                     st.session_state.df.at[idx, "Status"] = status
-                    st.session_state.df.at[idx, "Remarks"] = remarks
+                    st.session_state.df.at[idx, "Remarks"] = str(remarks) if remarks else ""
                     st.session_state.df.at[idx, "Last Updated"] = timestamp
                     st.session_state.df.at[idx, "Updated By"] = "Admin"
                 
                 save_data(st.session_state.df)
-                st.success("✅ All updates saved successfully!")
+                st.session_state.success_message = "✅ All updates saved successfully!"
                 st.rerun()
 
 # =============================================
@@ -519,12 +630,12 @@ elif menu == "📊 Dashboard & Analytics":
                 color = 'lightcoral'
             return f'background-color: {color}'
         
-        styled_df = summary_df.style.applymap(
+        styled_df = summary_df.style.map(
             color_progress, 
             subset=['Progress %']
         )
         
-        st.dataframe(styled_df, use_container_width=True, height=400)
+        st.dataframe(styled_df, width="stretch", height=400)
         
         # Charts
         st.markdown("---")
@@ -543,7 +654,7 @@ elif menu == "📊 Dashboard & Analytics":
                 color_continuous_scale="RdYlGn"
             )
             fig_progress.update_layout(height=400)
-            st.plotly_chart(fig_progress, use_container_width=True)
+            st.plotly_chart(fig_progress, width="stretch")
         
         with col2:
             # Status Distribution Pie Chart
@@ -555,7 +666,7 @@ elif menu == "📊 Dashboard & Analytics":
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
             fig_status.update_layout(height=400)
-            st.plotly_chart(fig_status, use_container_width=True)
+            st.plotly_chart(fig_status, width="stretch")
         
         # Timeline Chart
         st.markdown("---")
@@ -578,7 +689,7 @@ elif menu == "📊 Dashboard & Analytics":
             color_continuous_scale="Viridis"
         )
         fig_timeline.update_layout(height=400)
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        st.plotly_chart(fig_timeline, width="stretch")
         
         # Completion Rate by Item
         st.markdown("---")
@@ -600,7 +711,7 @@ elif menu == "📊 Dashboard & Analytics":
             color_continuous_scale="Blues"
         )
         fig_items.update_layout(height=600)
-        st.plotly_chart(fig_items, use_container_width=True)
+        st.plotly_chart(fig_items, width="stretch")
 
 # =============================================
 # VIEW 3: MANAGE FACULTY
@@ -608,6 +719,11 @@ elif menu == "📊 Dashboard & Analytics":
 else:  # Manage Faculty
     
     st.markdown('<p class="main-header">👥 Manage Faculty</p>', unsafe_allow_html=True)
+    
+    # Display success message if exists
+    if st.session_state.success_message:
+        st.success(st.session_state.success_message)
+        st.session_state.success_message = None
     
     tab1, tab2, tab3 = st.tabs(["➕ Add New Faculty", "✏️ Edit Faculty", "🗑️ Delete Faculty"])
     
@@ -629,7 +745,7 @@ else:  # Manage Faculty
         col1, col2, col3 = st.columns([2, 1, 2])
         
         with col2:
-            if st.button("➕ Add Faculty", type="primary", use_container_width=True):
+            if st.button("➕ Add Faculty", type="primary", width="stretch"):
                 if not new_name or not new_designation or not new_session_name:
                     st.error("⚠️ Please fill all required fields marked with *")
                 else:
@@ -642,7 +758,7 @@ else:  # Manage Faculty
                     
                     if result == "Success":
                         st.session_state.df = updated_df
-                        st.success(f"✅ Faculty '{new_name}' added successfully!")
+                        st.session_state.success_message = f"✅ Faculty '{new_name}' added successfully!"
                         st.balloons()
                         st.rerun()
                     else:
@@ -715,7 +831,7 @@ else:  # Manage Faculty
             col1, col2, col3 = st.columns([2, 1, 2])
             
             with col2:
-                if st.button("💾 Save Changes", type="primary", use_container_width=True):
+                if st.button("💾 Save Changes", type="primary", width="stretch"):
                     if not edit_name or not edit_designation or not edit_session_name:
                         st.error("⚠️ Please fill all required fields marked with *")
                     else:
@@ -730,7 +846,7 @@ else:  # Manage Faculty
                         
                         if result == "Success":
                             st.session_state.df = updated_df
-                            st.success(f"✅ Faculty details updated successfully!")
+                            st.session_state.success_message = f"✅ Faculty details updated successfully!"
                             st.rerun()
                         else:
                             st.error(f"❌ {result}")
@@ -771,14 +887,14 @@ else:  # Manage Faculty
             col1, col2, col3 = st.columns([2, 1, 2])
             
             with col2:
-                if st.button("🗑️ Delete Faculty", type="primary", use_container_width=True, disabled=not confirm):
+                if st.button("🗑️ Delete Faculty", type="primary", width="stretch", disabled=not confirm):
                     if confirm:
                         updated_df = delete_faculty(
                             selected_row["Name"],
                             selected_row["Session Date"]
                         )
                         st.session_state.df = updated_df
-                        st.success(f"✅ Faculty '{selected_row['Name']}' deleted successfully!")
+                        st.session_state.success_message = f"✅ Faculty '{selected_row['Name']}' deleted successfully!"
                         st.rerun()
 
 
