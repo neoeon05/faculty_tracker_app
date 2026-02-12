@@ -1,0 +1,18 @@
+# Faculty Checklist Management System - Requirements
+
+# Core Framework
+streamlit>=1.28.0
+
+# Data Processing
+pandas>=2.0.0
+
+# Excel File Handling
+openpyxl>=3.1.0        # For reading .xlsx files
+xlsxwriter>=3.1.0      # For writing formatted .xlsx files
+
+# Data Visualization
+plotly>=5.17.0
+
+# Date/Time utilities (included in Python standard library, no installation needed)
+# datetime
+# os
